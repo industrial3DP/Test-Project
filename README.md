@@ -13,7 +13,7 @@ Files
 
 Quick start (Windows PowerShell)
 ```powershell
-python "C:\Users\kiggi\Desktop\VS Workspaces\Test Project\python_test_0.1.py"
+python "...\VS Workspaces\Test Project\python_test_0.1.py"
 ```
 
 What you'll learn
