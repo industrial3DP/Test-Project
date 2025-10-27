@@ -71,6 +71,7 @@ import ollama
 
 # UI Elements - initialized in build_ui()
 label: Optional[tk.Label] = None          # Main text label at top
+counter_label: Optional[tk.Label] = None  # Click counter display
 btn: Optional[tk.Button] = None           # The button users try to click
 llm_toggle_btn: Optional[tk.Button] = None # Optional LLM control button
 llm_indicator: Optional[tk.Label] = None   # Shows LLM status (top-right)
@@ -81,6 +82,155 @@ click_count: int = 0           # Number of times button was clicked
 difficulty: int = 0           # Current game level (0-4)
 mouse_evade_enabled: bool = False  # True when button should dodge cursor
 llm_enabled: bool = True      # Whether to use AI for responses
+
+# Theme Configuration
+# ------------------
+# Color scheme and dynamic theming for the application
+
+def _apply_dynamic_theme(root_window: tk.Tk) -> None:
+    """Apply dynamic color theme based on current difficulty."""
+    colors = get_dynamic_colors(difficulty)
+    root_window.configure(**colors['window'])
+    if label is not None:
+        label.configure(**colors['window'])
+    if counter_label is not None:
+        counter_label.configure(**colors['window'])
+    if btn is not None:
+        btn.configure(**colors['button'])
+
+THEME = {
+    'dark': {
+        'window': {
+            # Root window uses special property names
+            'bg': '#1e1e1e',  # Dark background
+        },
+        'button': {
+            'background': '#2d2d2d',
+            'foreground': '#ffffff',
+            'activebackground': '#3d3d3d',
+            'activeforeground': '#ffffff'
+        },
+        'label': {
+            'background': '#1e1e1e',
+            'foreground': '#ffffff'
+        },
+        'messagebox': {
+            'bg': '#1e1e1e',
+            'fg': '#ffffff'
+        }
+    }
+}
+
+# Dynamic color intensities that increase with difficulty
+INTENSITY_COLORS = [
+    '#1e1e1e',  # Base dark
+    '#1e1e2e',  # Slightly more intense
+    '#1e1e3e',  # Medium intensity
+    '#1e1e4e',  # High intensity
+    '#1e1e5e'   # Maximum intensity
+]
+
+# Dialog color schemes for each difficulty level
+DIALOG_THEMES = [
+    {  # Level 0 - Professional
+        'bg': '#2d2d2d',
+        'fg': '#ffffff',
+        'font': ('Segoe UI', 10, 'normal'),
+        'title': 'Really?'
+    },
+    {  # Level 1 - Mild Annoyance
+        'bg': '#2d2d35',
+        'fg': "#55E0B7",  # Orange
+        'font': ('Segoe UI', 10, 'bold'),
+        'title': 'Oh Really?'
+    },
+    {  # Level 2 - Clear Frustration
+        'bg': '#2d2d3d',
+        'fg': "#00AAC09B",  # Coral
+        'font': ('Segoe UI', 11, 'bold'),
+        'title': 'REALLY??'
+    },
+    {  # Level 3 - Heavy Sarcasm
+        'bg': '#2d2d45',
+        'fg': "#6d49a7",  # Bright Red
+        'font': ('Segoe UI', 12, 'bold'),
+        'title': 'SERIOUSLY?!'
+    },
+    {  # Level 4 - Maximum Frustration
+        'bg': '#2d2d4d',
+        'fg': "#A1448A",  # Pure Red
+        'font': ('Segoe UI', 13, 'bold'),
+        'title': 'OH COME ON!!'
+    }
+]
+
+def get_dynamic_colors(difficulty: int) -> dict:
+    """Get color scheme based on current difficulty level."""
+    base_color = INTENSITY_COLORS[min(difficulty, len(INTENSITY_COLORS)-1)]
+    glow_intensity = min(difficulty * 20 + 40, 255)  # Increases with difficulty
+    
+    return {
+        'window': {
+            'bg': base_color,  # Root window uses 'bg' not 'background'
+        },
+        'button': {
+            'background': f'#2d2d{min(difficulty * 15 + 45, 99):02d}',
+            'foreground': f'#{glow_intensity:02x}{glow_intensity:02x}{glow_intensity:02x}',
+            'activebackground': f'#3d3d{min(difficulty * 15 + 45, 99):02d}',
+            'activeforeground': '#ffffff'
+        }
+    }
+
+# Title variations by difficulty level
+WINDOW_TITLES = [
+    # Level 0 - Basic
+    [
+        "Human Testing App",
+        "Click Testing Initiative",
+        "Button Interaction Study",
+        "Human Behavior Analysis",
+        "Persistence Evaluation"
+    ],
+    # Level 1 - Mildly Annoyed
+    [
+        "Please Stop Clicking",
+        "Unnecessary Click Counter",
+        "Button Abuse Monitor",
+        "Click Addiction Study",
+        "Persistent Clicker Assessment"
+    ],
+    # Level 2 - Getting Irritated
+    [
+        "Seriously, Stop Clicking",
+        "Chronic Click Syndrome",
+        "Button Harassment Log",
+        "Compulsive Clicking Monitor",
+        "Why Are You Still Here?"
+    ],
+    # Level 3 - Very Annoyed
+    [
+        "This Is Getting Ridiculous",
+        "Professional Click Pest",
+        "Button Torment Tracker",
+        "Obsessive Click Disorder",
+        "Don't You Have Better Things To Do?"
+    ],
+    # Level 4 - Maximum Frustration
+    [
+        "PLEASE STOP CLICKING",
+        "Pathological Button Pusher",
+        "Maximum Click Tolerance Exceeded",
+        "You're Still Here?!",
+        "Click Crisis Level: MAXIMUM"
+    ]
+]
+
+def get_window_title() -> str:
+    """Generate a window title based on current difficulty and click count."""
+    # Get the list of titles for current difficulty
+    titles = WINDOW_TITLES[min(difficulty, len(WINDOW_TITLES)-1)]
+    # Use click count to cycle through titles
+    return titles[click_count % len(titles)]
 
 #
 # CONFIGURATION AND CONSTANTS
@@ -147,13 +297,55 @@ def on_click() -> None:
     # Update main label with an admonishing message and the current count
     if label is not None:
         messages = [
-            "Tsk tsk... clicking buttons?",
-            "Still clicking? How persistent.",
-            "You just can't help yourself, can you?",
-            "Now you're just being stubborn!",
-            "Fine! Have it your way... for now."
+            # Level 0 - Mild surprise/amusement
+            [
+                "Tsk tsk... clicking buttons?",
+                "Oh look, someone found the button.",
+                "Really? The button caught your eye?",
+                "I see you've discovered clicking.",
+                "Another enthusiastic button pusher..."
+            ],
+            # Level 1 - Growing annoyance
+            [
+                "Still clicking? How persistent.",
+                "Don't you have better hobbies?",
+                "This button pushing is getting old.",
+                "Yes, it's still a button.",
+                "Your dedication is... questionable."
+            ],
+            # Level 2 - Clear frustration
+            [
+                "You just can't help yourself, can you?",
+                "Are we having fun yet?",
+                "This is becoming rather tedious.",
+                "Some people never learn...",
+                "Must. Keep. Clicking. Right?"
+            ],
+            # Level 3 - Heavy sarcasm
+            [
+                "Now you're just being stubborn!",
+                "Congratulations on your persistence.",
+                "Achievement Unlocked: Master Irritator",
+                "I'm not impressed, just disappointed.",
+                "Your dedication to annoyance is remarkable."
+            ],
+            # Level 4 - Maximum sass
+            [
+                "Fine! Have it your way... for now.",
+                "You've reached peak button pusher status.",
+                "I hope you're proud of yourself.",
+                "This is your life now, isn't it?",
+                "Well done. You've broken all records of stubbornness."
+            ]
         ]
-        label.config(text=f"{messages[min(difficulty, len(messages)-1)]} Clicks: {click_count}")
+        # Get messages for current difficulty and cycle through them based on click count
+        level_messages = messages[min(difficulty, len(messages)-1)]
+        message_index = click_count % len(level_messages)
+        label.config(text=level_messages[message_index])
+        
+    # Update click counter
+    if counter_label is not None:
+        counter_label.config(text=f"Clicks: {click_count}")
 
     # Prepare a context-aware prompt for the LLM with escalating frustration
     personalities = [
@@ -198,6 +390,12 @@ def on_click() -> None:
     else:
         difficulty = click_count - 1
     mouse_evade_enabled = difficulty >= 3
+
+    # Update window title
+    if root_win is not None:
+        root_win.title(get_window_title())
+        # Apply dynamic theme updates
+        _apply_dynamic_theme(root_win)
 
     # Apply effects - they now stack with difficulty
     apply_post_click_effect()
@@ -466,7 +664,78 @@ def _fetch_and_show_snark(prompt: str) -> None:
         try:
             # Log to debug before showing message box
             _log_debug(f"Message box text: {text}")
-            messagebox.showinfo("Really?", text)
+            
+            # Create a custom dialog with dynamic styling
+            dialog = tk.Toplevel(root_win)
+            theme = DIALOG_THEMES[min(difficulty, len(DIALOG_THEMES)-1)]
+            
+            # Configure dialog appearance
+            dialog.configure(bg=theme['bg'])
+            dialog.title(theme['title'])
+            dialog.transient(root_win)  # Make dialog modal
+            dialog.grab_set()
+            
+            # Center the dialog on screen
+            dialog.geometry("300x150")
+            dialog.resizable(False, False)
+            
+            # Add message with dynamic styling
+            msg = tk.Label(dialog, 
+                         text=text,
+                         wraplength=250,  # Enable text wrapping
+                         justify='center',
+                         bg=theme['bg'],
+                         fg=theme['fg'],
+                         font=theme['font'],
+                         pady=20)
+            msg.pack(expand=True, fill='both')
+            
+            # Add OK button with matching style
+            btn_frame = tk.Frame(dialog, bg=theme['bg'])
+            btn_frame.pack(pady=(0, 10))
+            
+            ok_btn = tk.Button(btn_frame, 
+                             text="OK",
+                             command=dialog.destroy,
+                             bg=theme['bg'],
+                             fg=theme['fg'],
+                             activebackground=theme['bg'],
+                             activeforeground=theme['fg'],
+                             font=('Segoe UI', 9, 'bold'),
+                             width=10)
+            ok_btn.pack(pady=5)
+            
+            # Position dialog relative to parent
+            if root_win:
+                x = root_win.winfo_x() + (root_win.winfo_width() - dialog.winfo_reqwidth()) // 2
+                y = root_win.winfo_y() + (root_win.winfo_height() - dialog.winfo_reqheight()) // 2
+                dialog.geometry(f"+{x}+{y}")
+            
+            # Animate entry if at higher difficulty
+            if difficulty >= 2:
+                dialog.attributes('-alpha', 0.0)
+                for i in range(11):
+                    dialog.attributes('-alpha', i * 0.1)
+                    dialog.update()
+                    time.sleep(0.02)
+            
+            # Add shake effect at max difficulty
+            if difficulty >= 4:
+                orig_x = dialog.winfo_x()
+                orig_y = dialog.winfo_y()
+                for _ in range(3):  # Shake 3 times
+                    for dx, dy in [(5,5), (-10,-5), (5,0), (0,-5), (5,5)]:
+                        dialog.geometry(f"+{orig_x + dx}+{orig_y + dy}")
+                        dialog.update()
+                        time.sleep(0.05)
+                dialog.geometry(f"+{orig_x}+{orig_y}")
+            
+            # Focus the OK button
+            ok_btn.focus_set()
+            
+            # Handle Enter key
+            dialog.bind('<Return>', lambda e: dialog.destroy())
+            
         except tk.TclError:
             # UI closed
             pass
@@ -728,15 +997,40 @@ def build_ui(root: tk.Tk) -> None:
     """
     global label, btn
 
-    # A simple label with a readable font size.
-    label = tk.Label(root, text="Don't Click the Button!", font=("Segoe UI", 14))
-    label.pack(pady=(12, 8))
+    # Title label with a readable font size
+    label = tk.Label(root, text="Don't Click the Button!", 
+                     font=("Segoe UI", 14), 
+                     **THEME['dark']['label'])
+    label.pack(pady=(12, 4))
+
+    # Click counter display below the title
+    global counter_label
+    counter_label = tk.Label(root, text="Clicks: 0", 
+                            font=("Segoe UI", 10),
+                            **THEME['dark']['label'])
+    counter_label.pack(pady=(0, 8))
 
     # The button is wired to call `on_click` when pressed. We place it at a
     # starting coordinate; subsequent effects will reposition it.
-    btn = tk.Button(root, text="No Click Zone", width=12, command=on_click)
+    btn = tk.Button(root, text="Do NOT Click.", 
+                    width=16, command=on_click,
+                    **THEME['dark']['button'])
     # initial placement (x,y) inside window; y>40 leaves space for the label
     btn.place(x=100, y=50)
+
+    def _apply_dynamic_theme(root_window: tk.Tk) -> None:
+        """Apply dynamic color theme based on current difficulty."""
+        colors = get_dynamic_colors(difficulty)
+        root_window.configure(**colors['window'])
+        if label is not None:
+            label.configure(**colors['window'])
+        if counter_label is not None:
+            counter_label.configure(**colors['window'])
+        if btn is not None:
+            btn.configure(**colors['button'])
+    
+    # Initial dynamic theme application
+    _apply_dynamic_theme(root)
 
     # Bind mouse motion to enable evasive behaviour when activated.
     root.bind('<Motion>', on_mouse_move)
@@ -811,9 +1105,20 @@ def main() -> None:
     """
     # Create the main application window
     root = tk.Tk()
-    root.title("Human Testing App")
+    root.title(get_window_title())  # Set initial title
     # Set a reasonable default size. The layout will still expand if needed.
     root.geometry("320x120")
+
+    # Apply dark theme to root window
+    root.configure(**THEME['dark']['window'])
+    
+    # Override default dialog colors for message boxes
+    root.option_add('*Dialog.msg.bg', THEME['dark']['messagebox']['bg'])
+    root.option_add('*Dialog.msg.fg', THEME['dark']['messagebox']['fg'])
+    root.option_add('*Dialog.bg', THEME['dark']['messagebox']['bg'])
+    root.option_add('*Dialog.fg', THEME['dark']['messagebox']['fg'])
+    root.option_add('*Dialog.Button.bg', THEME['dark']['button']['background'])
+    root.option_add('*Dialog.Button.fg', THEME['dark']['button']['foreground'])
 
     # Build the user interface
     global root_win
