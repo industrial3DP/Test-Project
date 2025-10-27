@@ -155,12 +155,34 @@ def on_click() -> None:
         ]
         label.config(text=f"{messages[min(difficulty, len(messages)-1)]} Clicks: {click_count}")
 
-    # Prepare a context-aware prompt for the LLM
+    # Prepare a context-aware prompt for the LLM with escalating frustration
+    personalities = [
+        "mildly annoyed but professional",  # Level 0
+        "visibly irritated",                # Level 1
+        "thoroughly exasperated",           # Level 2
+        "at your wit's end",               # Level 3
+        "completely done with humanity"     # Level 4
+    ]
+    
+    intensity_words = [
+        "persists in",           # Level 0
+        "stubbornly continues",  # Level 1
+        "refuses to stop",       # Level 2
+        "obsessively keeps",     # Level 3
+        "maniacally insists on"  # Level 4
+    ]
+    
+    # Base prompt
     prompt = (
-        f"You are a short, witty, mildly snarky assistant. The user has clicked "
-        f"a GUI button {click_count} time(s). Difficulty level {difficulty}. "
-        f"Respond in one short sentence (under 60 characters) that teases the user."
+        f"You are a snarky AI assistant who is {personalities[difficulty]}. "
+        f"A particularly stubborn user {intensity_words[difficulty]} clicking your button "
+        f"({click_count} times now). Express your growing frustration in one short, "
+        f"sharp sentence (under 60 chars). Be rude or inappropriate as needed."
     )
+    
+    # Add model-specific adjustments
+    if OLLAMA_MODEL.lower().startswith("tinyllama"):
+        prompt += " And please, no mentions of tea whatsoever."
 
     # If LLM is enabled try to fetch a snarky reply asynchronously; otherwise
     # show a fallback message immediately.
