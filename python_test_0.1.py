@@ -38,40 +38,49 @@ def on_click() -> None:
     """Handle an actual click on the button.
 
     - Increment the click counter and update the label with an admonishment.
-    - Show a short info dialog (keeps the joke tone).
-    - Trigger the next difficulty behaviour so the button becomes harder to
-      click next time.
+    - Show a short info dialog with progressively snarkier messages.
+    - Increase difficulty: each level keeps previous behaviors and adds new ones.
     """
     global click_count, difficulty, mouse_evade_enabled
 
     click_count += 1
 
-    # Update main label with an admonishing message and the current count.
+    # Update main label with an admonishing message and the current count
     if label is not None:
-        label.config(text=f"Bad Human! Clicks: {click_count}")
+        messages = [
+            "Tsk tsk... clicking buttons?",
+            "Still clicking? How persistent.",
+            "You just can't help yourself, can you?",
+            "Now you're just being stubborn!",
+            "Fine! Have it your way... for now."
+        ]
+        label.config(text=f"{messages[min(difficulty, len(messages)-1)]} Clicks: {click_count}")
 
-    # A short info dialog for fun.
-    messagebox.showinfo("Info", f"You clicked {click_count} time(s).")
+    # Show a dialog with escalating snark
+    messagebox.showinfo("Really?", f"Click #{click_count}... I see how it is.")
 
-    # Advance difficulty and enable mouse-evade on higher levels.
-    difficulty = (difficulty + 1) % 5
+    # Advance difficulty and enable mouse-evade at level 3
+    if click_count >= 5:  # Max difficulty
+        difficulty = 4
+    else:
+        difficulty = click_count - 1
     mouse_evade_enabled = difficulty >= 3
 
-    # Apply the immediate post-click effect so the button moves/changes now.
+    # Apply effects - they now stack with difficulty
     apply_post_click_effect()
 
 
 def apply_post_click_effect() -> None:
-    """Apply an effect after each click to make the button harder to catch.
+    """Apply effects after each click, stacking them as difficulty increases.
 
-    Effects cycle by `difficulty`:
-    0 - small random move
-    1 - shrink (narrower)
-    2 - grow (bigger)
-    3 - enable mouse-evade and do a quick jiggle
-    4 - stronger random reposition
+    Progressive effects (they stack):
+    0 - small random nudge
+    1 - adds periodic size changes
+    2 - adds stronger repositioning
+    3 - enables mouse evasion + adds quick jiggle
+    4 - everything gets more aggressive
 
-    The effects are intentionally mild so the button remains clickable.
+    Effects stack and intensify but remain possible to click with persistence.
     """
     if btn is None:
         return
@@ -88,25 +97,36 @@ def apply_post_click_effect() -> None:
     def clamp(x, a, b):
         return max(a, min(b, x))
 
-    if difficulty == 0:
-        # small random nudges
-        nx = random.randint(10, max(10, win_w - b_w - 10))
-        ny = random.randint(40, max(40, win_h - b_h - 10))
-        btn.place(x=nx, y=ny)
+    # Level 0+: Small random nudge
+    nx = random.randint(10, max(10, win_w - b_w - 10))
+    ny = random.randint(40, max(40, win_h - b_h - 10))
+    btn.place(x=nx, y=ny)
 
-    elif difficulty == 1:
-        # shrink but keep clickable: width is in text units, minimum 6
-        new_w = max(6, btn.cget("width") - 3)
-        btn.config(width=new_w)
+    # Level 1+: Add size changes
+    if difficulty >= 1:
+        if random.random() < 0.5:
+            # Randomly shrink or grow, but stay clickable
+            new_w = btn.cget("width")
+            if random.random() < 0.5:
+                new_w = max(6, new_w - 2)  # Shrink
+            else:
+                new_w = min(20, new_w + 2)  # Grow
+            btn.config(width=new_w)
 
-    elif difficulty == 2:
-        # grow a bit, to make it awkward
-        new_w = min(30, btn.cget("width") + 4)
-        btn.config(width=new_w)
+    # Level 2+: Add stronger repositioning
+    if difficulty >= 2:
+        # Occasionally make bigger jumps
+        if random.random() < 0.3:
+            nx = random.randint(10, max(10, win_w - b_w - 10))
+            ny = random.randint(40, max(40, win_h - b_h - 10))
+            btn.place(x=nx, y=ny)
 
-    elif difficulty == 3:
-        # quick jiggle: perform a few tiny moves
-        for dx, dy in ((-10, 0), (10, 0), (0, -6), (0, 6)):
+    # Level 3+: Add jiggle animation
+    if difficulty >= 3:
+        # Quick jiggle with intensity based on difficulty
+        intensity = 5 if difficulty < 4 else 8
+        moves = [(-intensity, 0), (intensity, 0), (0, -intensity), (0, intensity)]
+        for dx, dy in moves:
             try:
                 cur_x = btn.winfo_x()
                 cur_y = btn.winfo_y()
@@ -115,14 +135,14 @@ def apply_post_click_effect() -> None:
                 btn.place(x=nx, y=ny)
                 root.update()
             except tk.TclError:
-                # GUI might close during animation; ignore safely
                 break
 
-    elif difficulty == 4:
-        # stronger reposition but still inside window
-        nx = random.randint(10, max(10, win_w - b_w - 10))
-        ny = random.randint(40, max(40, win_h - b_h - 10))
-        btn.place(x=nx, y=ny)
+    # Level 4: Everything gets more intense
+    if difficulty >= 4:
+        # More frequent size changes
+        if random.random() < 0.4:
+            new_w = max(6, min(25, btn.cget("width") + random.randint(-3, 3)))
+            btn.config(width=new_w)
 
 
 def on_mouse_move(event: tk.Event) -> None:
