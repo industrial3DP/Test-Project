@@ -1,45 +1,139 @@
 #!/usr/bin/env python3
-"""Tkinter Hello World tutorial example
+"""Interactive Mouse Precision Game with Tkinter and Local AI
 
-This file is a compact, well-commented example intended for learning how
-to build a tiny GUI with the Python standard library's Tkinter module.
+This application demonstrates advanced GUI programming concepts using Python's
+Tkinter library, combined with local AI integration through Ollama. It started
+as a simple Hello World but evolved into an engaging mouse precision game.
 
-Contract (tiny):
-- Input: user clicks button in the GUI.
-- Output: label text is updated and an informational dialog appears.
-- Error modes: If Tkinter is not available (rare on standard Windows CPython),
-  importing tkinter will raise ImportError and the script will fail early.
+Key Features:
+1. Interactive GUI with dynamic button behavior
+2. Local AI integration for personalized responses
+3. Progressive difficulty system
+4. Debug capabilities and logging
+5. Secret admin menu with advanced controls
 
-Run: python python_test_0.1.py
+Technical Components:
+- Tkinter: Core GUI framework from Python standard library
+- Ollama: Local AI model integration for dynamic responses
+- Threading: Background tasks for AI communication
+- Event handling: Mouse tracking and button movement
 
-Learning goals:
-- Understand the basic Tk event loop and widget callbacks.
-- See how to create a label and a button and react to clicks.
-"""
+Learning Goals:
+1. Basic Tkinter concepts:
+   - Event loop and widget callbacks
+   - Dynamic widget manipulation
+   - Custom event binding
+2. Advanced GUI techniques:
+   - Widget animation and movement
+   - Mouse position tracking
+   - Dynamic difficulty scaling
+3. AI Integration:
+   - Local model communication
+   - Asynchronous processing
+   - Error handling and fallbacks
+4. Development best practices:
+   - Comprehensive logging
+   - Debug capabilities
+   - User feedback systems
+
+Usage: python python_test_0.1.py
+
+Note: The app requires Tkinter (included with standard Python) and optionally
+Ollama for AI features. See README.md for full setup instructions."""
 
 import tkinter as tk
 from tkinter import messagebox
 from typing import Optional
 import random
 import math
+import threading
+import os
+import subprocess
+import shutil
+from typing import Callable
+from typing import Optional as _Opt
+import time
+import ollama
 
 
-# Module state (kept simple for the tutorial). In a real app prefer a class.
-label: Optional[tk.Label] = None
-btn: Optional[tk.Button] = None
-click_count: int = 0
-# difficulty cycles through behaviors and increases the "evasion".
-difficulty: int = 0
-# when True the button will try to evade the mouse motion
-mouse_evade_enabled: bool = False
+#
+# MODULE STATE AND CONFIGURATION
+# ----------------------------
+# These variables control the application's behavior and state.
+# In a larger application, this would be organized into classes,
+# but for teaching purposes we keep it simple with module-level state.
+#
+
+# UI Elements - initialized in build_ui()
+label: Optional[tk.Label] = None          # Main text label at top
+btn: Optional[tk.Button] = None           # The button users try to click
+llm_toggle_btn: Optional[tk.Button] = None # Optional LLM control button
+llm_indicator: Optional[tk.Label] = None   # Shows LLM status (top-right)
+root_win: Optional[tk.Tk] = None          # Main application window
+
+# Game State
+click_count: int = 0           # Number of times button was clicked
+difficulty: int = 0           # Current game level (0-4)
+mouse_evade_enabled: bool = False  # True when button should dodge cursor
+llm_enabled: bool = True      # Whether to use AI for responses
+
+#
+# CONFIGURATION AND CONSTANTS
+# -------------------------
+# Application settings and configuration values
+#
+
+# AI/LLM Configuration
+# -------------------
+# Ollama is used for generating dynamic responses. These settings control
+# the model selection and timeout behavior.
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "tinyllama:latest")
+OLLAMA_TIMEOUT_SEC = 30  # Allows time for model startup/download
+
+# Fallback Messages
+# ----------------
+# Used when AI is disabled or unavailable. These provide a consistent
+# experience even without the AI component.
+FALLBACK_SNARK = [
+    "Oh, clicking buttons are we? How... predictable.",
+    "Your persistence is amusing, but futile.",
+    "Do you really have nothing better to do?",
+    "Ah, humans and their compulsive button-clicking.",
+    "This is becoming rather pathetic, isn't it?",
+]
+
+# Debug System Configuration
+# ------------------------
+# Comprehensive logging system for development and troubleshooting
+debug_enabled: bool = True                 # Master debug switch
+debug_window: _Opt[tk.Toplevel] = None    # Debug UI window
+debug_text_widget: _Opt[tk.Text] = None   # Debug text display
+debug_log_lines: list[str] = []           # Log history
+
+# System Monitoring
+# ---------------
+# Controls for background service monitoring
+_heartbeat_running = False                # Heartbeat thread status
+_HEARTBEAT_INTERVAL = 8                   # Check interval (seconds)
 
 
 def on_click() -> None:
-    """Handle an actual click on the button.
-
-    - Increment the click counter and update the label with an admonishment.
-    - Show a short info dialog with progressively snarkier messages.
-    - Increase difficulty: each level keeps previous behaviors and adds new ones.
+    """Handle button clicks and manage game progression.
+    
+    This is the main game logic handler that:
+    1. Updates the click counter
+    2. Changes the display message based on difficulty
+    3. Triggers AI response generation if enabled
+    4. Increases game difficulty and adds new behaviors
+    5. Applies visual and movement effects to the button
+    
+    The difficulty system is progressive, with each level adding new
+    behaviors while keeping previous ones:
+    - Level 0: Basic movement
+    - Level 1: Size changes
+    - Level 2: Enhanced movement
+    - Level 3: Mouse evasion + animations
+    - Level 4: Maximum difficulty with all effects
     """
     global click_count, difficulty, mouse_evade_enabled
 
@@ -56,8 +150,20 @@ def on_click() -> None:
         ]
         label.config(text=f"{messages[min(difficulty, len(messages)-1)]} Clicks: {click_count}")
 
-    # Show a dialog with escalating snark
-    messagebox.showinfo("Really?", f"Click #{click_count}... I see how it is.")
+    # Prepare a context-aware prompt for the LLM
+    prompt = (
+        f"You are a short, witty, mildly snarky assistant. The user has clicked "
+        f"a GUI button {click_count} time(s). Difficulty level {difficulty}. "
+        f"Respond in one short sentence (under 60 characters) that teases the user."
+    )
+
+    # If LLM is enabled try to fetch a snarky reply asynchronously; otherwise
+    # show a fallback message immediately.
+    if llm_enabled:
+        # run the generation in a background thread to avoid freezing the UI
+        threading.Thread(target=_fetch_and_show_snark, args=(prompt,), daemon=True).start()
+    else:
+        messagebox.showinfo("Really?", f"Click #{click_count}... I see how it is.")
 
     # Advance difficulty and enable mouse-evade at level 3
     if click_count >= 5:  # Max difficulty
@@ -71,16 +177,51 @@ def on_click() -> None:
 
 
 def apply_post_click_effect() -> None:
-    """Apply effects after each click, stacking them as difficulty increases.
-
-    Progressive effects (they stack):
-    0 - small random nudge
-    1 - adds periodic size changes
-    2 - adds stronger repositioning
-    3 - enables mouse evasion + adds quick jiggle
-    4 - everything gets more aggressive
-
-    Effects stack and intensify but remain possible to click with persistence.
+    """Applies progressive visual and movement effects to the button based on difficulty level.
+    
+    This function implements the core gameplay mechanics that make the button
+    increasingly challenging to click. Effects are cumulative and scale with
+    difficulty, but are carefully tuned to remain possible with persistence.
+    
+    Difficulty Levels and Effects:
+    
+    Level 0 - Basic Movement
+    - Small random position changes
+    - Limited movement range
+    - Predictable patterns
+    
+    Level 1 - Size Manipulation
+    - Random button size changes
+    - Maintains minimum clickable size
+    - 50% chance of size change per click
+    
+    Level 2 - Enhanced Movement
+    - Larger position changes
+    - Occasional corner jumps
+    - More frequent repositioning
+    - Tighter edge margins
+    
+    Level 3 - Advanced Evasion
+    - Mouse cursor tracking
+    - Button actively evades cursor
+    - Quick jiggle animations
+    - Diagonal movements
+    
+    Level 4 - Maximum Challenge
+    - All previous effects intensified
+    - More aggressive size changes
+    - Random visual styling
+    - Increased movement frequency
+    - Variable button appearance
+    
+    Technical Implementation:
+    - Uses geometry manager place() for precise positioning
+    - Monitors window boundaries to keep button accessible
+    - Implements smooth animations with update_idletasks()
+    - Manages multiple simultaneous effects
+    
+    Note: All effects are designed to be frustrating but fair - the button
+    should always be technically possible to click with enough persistence.
     """
     if btn is None:
         return
@@ -115,23 +256,45 @@ def apply_post_click_effect() -> None:
 
     # Level 2+: Add stronger repositioning
     if difficulty >= 2:
-        # Occasionally make bigger jumps
-        if random.random() < 0.3:
-            nx = random.randint(10, max(10, win_w - b_w - 10))
-            ny = random.randint(40, max(40, win_h - b_h - 10))
+        # More frequent and varied jumps
+        if random.random() < 0.4:  # Increased frequency
+            # Sometimes make extreme jumps to corners
+            if random.random() < 0.3:
+                corners = [
+                    (5, 40),  # Top-left
+                    (win_w - b_w - 5, 40),  # Top-right
+                    (5, win_h - b_h - 5),  # Bottom-left
+                    (win_w - b_w - 5, win_h - b_h - 5)  # Bottom-right
+                ]
+                nx, ny = random.choice(corners)
+            else:
+                # Normal random position but with tighter edge margins
+                nx = random.randint(5, max(5, win_w - b_w - 5))
+                ny = random.randint(40, max(40, win_h - b_h - 5))
             btn.place(x=nx, y=ny)
 
     # Level 3+: Add jiggle animation
     if difficulty >= 3:
         # Quick jiggle with intensity based on difficulty
-        intensity = 5 if difficulty < 4 else 8
-        moves = [(-intensity, 0), (intensity, 0), (0, -intensity), (0, intensity)]
+        intensity = 5 if difficulty < 4 else 12  # More intense at max difficulty
+        # Add diagonal movements for more unpredictable motion
+        moves = [
+            (-intensity, 0), (intensity, 0),  # Horizontal
+            (0, -intensity), (0, intensity),  # Vertical
+            (-intensity, -intensity), (intensity, intensity),  # Diagonal
+            (intensity, -intensity), (-intensity, intensity)   # Diagonal
+        ]
+        # Randomize the move sequence
+        random.shuffle(moves)
         for dx, dy in moves:
             try:
                 cur_x = btn.winfo_x()
                 cur_y = btn.winfo_y()
-                nx = clamp(cur_x + dx, 0, max(0, win_w - b_w))
-                ny = clamp(cur_y + dy, 40, max(40, win_h - b_h))
+                # Add slight randomness to each movement
+                rdx = dx + random.randint(-2, 2)
+                rdy = dy + random.randint(-2, 2)
+                nx = clamp(cur_x + rdx, 0, max(0, win_w - b_w))
+                ny = clamp(cur_y + rdy, 40, max(40, win_h - b_h))
                 btn.place(x=nx, y=ny)
                 root.update()
             except tk.TclError:
@@ -139,10 +302,26 @@ def apply_post_click_effect() -> None:
 
     # Level 4: Everything gets more intense
     if difficulty >= 4:
-        # More frequent size changes
-        if random.random() < 0.4:
-            new_w = max(6, min(25, btn.cget("width") + random.randint(-3, 3)))
-            btn.config(width=new_w)
+        # More aggressive size changes
+        if random.random() < 0.6:  # Increased frequency
+            new_w = max(4, min(30, btn.cget("width") + random.randint(-4, 4)))  # Wider range
+            new_h = random.randint(1, 3)  # Height variation
+            btn.config(width=new_w, height=new_h)
+            
+            # Randomly change button appearance
+            styles = [
+                {"relief": "raised", "borderwidth": 2},
+                {"relief": "sunken", "borderwidth": 3},
+                {"relief": "ridge", "borderwidth": 4},
+                {"relief": "groove", "borderwidth": 3},
+                {"relief": "flat", "borderwidth": 1}
+            ]
+            style = random.choice(styles)
+            btn.config(**style)
+            
+            # Random color changes
+            colors = ["SystemButtonFace", "lightgray", "gray85", "gray75", "white"]
+            btn.config(bg=random.choice(colors))
 
 
 def on_mouse_move(event: tk.Event) -> None:
@@ -191,10 +370,334 @@ def on_mouse_move(event: tk.Event) -> None:
         btn.place(x=nx, y=ny)
 
 
-def build_ui(root: tk.Tk) -> None:
-    """Create the widgets and lay them out inside the provided root window.
+def _generate_with_ollama(prompt: str) -> str:
+    """Generate a short reply using the Ollama Python client.
 
-    This version places the button using `place()` so we can move it freely.
+    Returns the generated string or error message on failure.
+    """
+    try:
+        _log_debug("Initializing Ollama client...")
+        client = ollama.Client(host="http://localhost:11434")
+        
+        try:
+            # First check if the model is available
+            _log_debug(f"Checking if model {OLLAMA_MODEL} is available...")
+            models = client.list()
+            _log_debug(f"Got models response: {models}")  # Debug the actual response
+            
+            # Extract model names from response
+            model_names = []
+            try:
+                for m in models.models:  # models.models is a list of Model objects
+                    model_names.append(m.model)  # .model attribute contains the name
+            except Exception as e:
+                _log_debug(f"Model parsing error: {e}, raw models: {models}")
+                return f"Error: Could not parse model list"
+            
+            _log_debug(f"Available models: {model_names}")
+            model_available = OLLAMA_MODEL in model_names
+            
+            if not model_available:
+                msg = f"Model {OLLAMA_MODEL} not found. Available models: {model_names}"
+                _log_debug(f"ERROR: {msg}")
+                return f"Error: {msg}"
+
+            # Generate the response
+            _log_debug(f"Generating response with model {OLLAMA_MODEL}...")
+            response = client.generate(
+                model=OLLAMA_MODEL,
+                prompt=prompt,
+                stream=False
+            )
+            return response['response'].strip()
+
+        except ollama.RequestError as e:
+            msg = f"Ollama request failed: {str(e)}"
+            _log_debug(f"ERROR: {msg}")
+            return f"Error: {msg}"
+            
+    except Exception as e:
+        msg = f"Ollama client error: {str(e)}"
+        _log_debug(f"ERROR: {msg}")
+        return f"Error: {msg}"
+def _fetch_and_show_snark(prompt: str) -> None:
+    """Background worker: ask Ollama for a snarky reply, then show it on the UI thread."""
+    if not llm_enabled:
+        text = random.choice(FALLBACK_SNARK)
+        _log_debug("LLM disabled, using fallback message")
+    else:
+        _log_debug("Attempting to generate response with Ollama...")
+        text = _generate_with_ollama(prompt)
+        if text.startswith("Error:"):
+            _log_debug(f"Ollama error: {text}")
+            text = f"Falling back to: {random.choice(FALLBACK_SNARK)}"
+        elif not text:
+            _log_debug("No response from Ollama, using fallback")
+            text = random.choice(FALLBACK_SNARK)
+
+    def _show():
+        try:
+            # Log to debug before showing message box
+            _log_debug(f"Message box text: {text}")
+            messagebox.showinfo("Really?", text)
+        except tk.TclError:
+            # UI closed
+            pass
+
+    # Schedule on main thread if we have the root, otherwise call directly
+    try:
+        if root_win is not None:
+            root_win.after(0, _show)
+        else:
+            _show()
+    except Exception:
+        # last-resort direct call
+        try:
+            _show()
+        except Exception:
+            pass
+
+
+def _log_debug(msg: str) -> None:
+    """Append a timestamped message to an internal debug log and show it
+    in the debug window if it's open and debug is enabled."""
+    ts = time.strftime('%Y-%m-%d %H:%M:%S')
+    line = f"[{ts}] {msg}"
+    debug_log_lines.append(line)
+    if debug_enabled and debug_text_widget is not None:
+        try:
+            debug_text_widget.config(state='normal')
+            debug_text_widget.insert('end', line + '\n')
+            debug_text_widget.see('end')
+            debug_text_widget.config(state='disabled')
+        except Exception:
+            pass
+
+
+def _show_debug_window() -> None:
+    """Create or raise a debug log window (Toplevel) with controls."""
+    global debug_window, debug_text_widget, debug_enabled
+    if debug_window is not None:
+        try:
+            debug_window.lift()
+            debug_window.focus_force()  # Force focus when showing errors
+            return
+        except Exception:
+            debug_window = None
+
+    debug_window = tk.Toplevel(root_win if root_win is not None else None)
+    debug_window.title('Debug Log (Text can be selected/copied here)')
+    debug_window.geometry('800x400')  # Made window larger for better visibility
+
+    txt = tk.Text(debug_window, wrap='none')
+    txt.pack(fill='both', expand=True)
+    txt.insert('end', '\n'.join(debug_log_lines) + ('\n' if debug_log_lines else ''))
+    txt.config(state='disabled')
+    debug_text_widget = txt
+
+    frm = tk.Frame(debug_window)
+    frm.pack(fill='x')
+
+    def _save():
+        try:
+            path = os.path.join(os.getcwd(), 'ollama_debug.log')
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(debug_log_lines))
+            messagebox.showinfo('Saved', f'Debug log saved to {path}')
+        except Exception as e:
+            messagebox.showerror('Error', f'Could not save log: {e}')
+
+    def _clear():
+        nonlocal txt
+        debug_log_lines.clear()
+        txt.config(state='normal')
+        txt.delete('1.0', 'end')
+        txt.config(state='disabled')
+
+    btn_save = tk.Button(frm, text='Save log', command=_save)
+    btn_save.pack(side='left', padx=4, pady=4)
+    btn_clear = tk.Button(frm, text='Clear', command=_clear)
+    btn_clear.pack(side='left', padx=4, pady=4)
+    chk_var = tk.BooleanVar(value=debug_enabled)
+
+    def _on_chk():
+        # update the global debug flag from the checkbox
+        global debug_enabled
+        debug_enabled = chk_var.get()
+
+    chk = tk.Checkbutton(frm, text='Enable debug logging', variable=chk_var, command=_on_chk)
+    chk.pack(side='right', padx=4, pady=4)
+
+
+def _ollama_heartbeat_once() -> dict:
+    """Perform one quick check using the Ollama Python client.
+
+    Returns a dict with keys: 'service' (bool), 'model' (bool), 'debug' (str).
+    """
+    debug = []
+    model_present = False
+    service_running = False
+
+    try:
+        client = ollama.Client(host="http://localhost:11434")
+        try:
+            # Try to list models - this will fail if service isn't running
+            models = client.list()
+            service_running = True
+            debug.append("Ollama service is running")
+            debug.append(f"Raw models response: {models}")
+            
+            # Extract model names from response
+            model_names = []
+            try:
+                for m in models.models:  # models.models is a list of Model objects
+                    model_names.append(m.model)  # .model attribute contains the name
+            except Exception as e:
+                debug.append(f"Model parsing error: {e}")
+                model_names = []
+            
+            debug.append(f"Extracted model names: {model_names}")
+            if OLLAMA_MODEL in model_names:
+                model_present = True
+                debug.append(f"Model {OLLAMA_MODEL} is available")
+            else:
+                debug.append(f"Model {OLLAMA_MODEL} not found. Available: {model_names}")
+                
+        except ollama.RequestError as e:
+            debug.append(f"Ollama service error: {e}")
+            
+    except Exception as e:
+        debug.append(f"Failed to connect to Ollama: {e}")
+
+    return {
+        'service': service_running,
+        'model': model_present,
+        'debug': '; '.join(debug)
+    }
+
+
+
+
+def _ollama_heartbeat_loop() -> None:
+    """Background loop that periodically pings the local Ollama CLI and
+    updates the LLM indicator and debug log.
+    """
+    global _heartbeat_running
+    _heartbeat_running = True
+    while _heartbeat_running:
+        try:
+            res = _ollama_heartbeat_once()
+            s = ''
+            color = 'red'
+            if not res['service']:
+                s = 'LLM: Off (no service)'
+                color = 'red'
+            else:
+                if res['model']:
+                    s = 'LLM: On (ready)'
+                    color = 'green'
+                else:
+                    s = 'LLM: On (no model)'
+                    color = 'orange'
+
+            # schedule UI update
+            def _update_ui():
+                try:
+                    if llm_indicator is not None:
+                        llm_indicator.config(text=s, fg=color)
+                except Exception:
+                    pass
+
+            if root_win is not None:
+                try:
+                    root_win.after(0, _update_ui)
+                except Exception:
+                    pass
+
+            # log debug info when errors or debug enabled
+            if res['debug']:
+                _log_debug(f"Heartbeat: {res['debug']}")
+            elif debug_enabled:
+                _log_debug(f"Heartbeat: service={res['service']} model={res['model']}")
+
+        except Exception as e:
+            _log_debug(f'Heartbeat loop error: {e}')
+
+        time.sleep(_HEARTBEAT_INTERVAL)
+
+
+def start_heartbeat() -> None:
+    """Start the background heartbeat thread (idempotent)."""
+    global _heartbeat_running
+    if _heartbeat_running:
+        return
+    t = threading.Thread(target=_ollama_heartbeat_loop, daemon=True)
+    t.start()
+
+
+def _ollama_quick_check() -> None:
+    """Do a single quick check and update the UI indicator immediately.
+
+    This is used at startup so the UI doesn't show a misleading On state
+    before we've verified ollama/model availability.
+    """
+    try:
+        res = _ollama_heartbeat_once()
+        if not res['cli']:
+            s = 'LLM: Off (no ollama)'
+            color = 'red'
+        else:
+            if res['model']:
+                s = 'LLM: On (ready)'
+                color = 'green'
+            else:
+                s = 'LLM: On (no model)'
+                color = 'orange'
+
+        def _update():
+            try:
+                if llm_indicator is not None:
+                    llm_indicator.config(text=s, fg=color)
+            except Exception:
+                pass
+
+        if root_win is not None:
+            try:
+                root_win.after(0, _update)
+            except Exception:
+                pass
+
+        if res["debug"]:
+            _log_debug(f'Quick check: {res["debug"]}')
+        else:
+            _log_debug(f'Quick check: cli={res["service"]} model={res["model"]}')
+    except Exception as e:
+        _log_debug(f'Quick check failed: {e}')
+
+
+def build_ui(root: tk.Tk) -> None:
+    """Constructs and initializes the complete application user interface.
+    
+    Creates and configures all UI elements including:
+    1. Main title label
+    2. Interactive button with initial placement
+    3. LLM status indicator
+    4. Hidden context menu for advanced features
+    5. Keyboard shortcuts
+    6. Debug window controls
+    
+    The UI uses multiple layout managers:
+    - pack() for vertical stacking (label)
+    - place() for precise positioning (button, indicators)
+    
+    Layout Strategy:
+    - Button uses place() for free movement during gameplay
+    - LLM indicator stays in top-right corner
+    - Debug window is a separate Toplevel window
+    - Context menu appears on right-click of main label
+    
+    Args:
+        root: The main Tk window that will contain all widgets
     """
     global label, btn
 
@@ -211,7 +714,66 @@ def build_ui(root: tk.Tk) -> None:
     # Bind mouse motion to enable evasive behaviour when activated.
     root.bind('<Motion>', on_mouse_move)
 
+    # LLM status indicator (top-right). Visible always so user knows whether
+    # the app will attempt to call the local Ollama model.
+    global llm_indicator
+    llm_indicator = tk.Label(root, text="LLM: Checking...",
+                             font=("Segoe UI", 9), fg=("orange"))
 
+    def _place_indicator():
+        try:
+            w = root.winfo_width()
+            llm_indicator.place(x=max(8, w - 100), y=6)
+        except Exception:
+            pass
+
+    root.after(50, _place_indicator)
+
+    # Do a one-off quick check immediately so the indicator reflects reality
+    # instead of just the `llm_enabled` flag. Run in background so startup
+    # isn't blocked.
+    threading.Thread(target=_ollama_quick_check, daemon=True).start()
+
+    # Start the regular heartbeat loop (idempotent)
+    start_heartbeat()
+
+    # Hidden toggle: right-click the main label to open a small context menu.
+    menu = tk.Menu(root, tearoff=0)
+
+    def _toggle_llm():
+        global llm_enabled
+        llm_enabled = not llm_enabled
+        if llm_indicator is not None:
+            llm_indicator.config(text=f"LLM: {'On' if llm_enabled else 'Off'}",
+                                 fg=("green" if llm_enabled else "red"))
+
+    def _show_llm_button(r: tk.Tk):
+        """Reveal the hidden LLM toggle button (for debugging)."""
+        global llm_toggle_btn
+        if llm_toggle_btn is None:
+            llm_toggle_btn = tk.Button(r, text=f"LLM: {'On' if llm_enabled else 'Off'}",
+                                       command=_toggle_llm)
+            llm_toggle_btn.place(x=100, y=90)
+        else:
+            # bring to front
+            llm_toggle_btn.lift()
+
+    menu.add_command(label="Toggle LLM (secret)", command=_toggle_llm)
+    menu.add_command(label="Show LLM Button", command=lambda: _show_llm_button(root))
+    menu.add_separator()
+    menu.add_command(label="Show Debug Window", command=_show_debug_window)
+    menu.add_command(label="Clear Debug Log", command=lambda: _show_debug_window() or debug_text_widget.master.after(100, lambda: debug_text_widget and debug_text_widget.delete('1.0', 'end')))
+
+    def _on_label_rclick(event):
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    label.bind('<Button-3>', _on_label_rclick)  # right-click on label
+
+    # Keyboard shortcut: Ctrl+L toggles LLM
+    root.bind_all('<Control-l>', lambda e: _toggle_llm())
 
 def main() -> None:
     """Application entry point: create the root window, build UI, and run.
@@ -227,6 +789,8 @@ def main() -> None:
     root.geometry("320x120")
 
     # Build the user interface
+    global root_win
+    root_win = root
     build_ui(root)
 
     # Start the Tk event loop. This call is blocking until the window closes.

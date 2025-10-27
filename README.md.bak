@@ -1,21 +1,24 @@
 # Hello World Tkinter Tutorial
 
-This small project demonstrates a minimal Tkinter GUI in Python that evolved into an interactive joke app. It showcases basic GUI programming, local LLM integration, and playful user interaction patterns.
+This small project demonstrates a minimal Tkinter GUI in Python. It's
+intended as a tutorial/example you can read and run to learn the basics.
 
-## Files
-- `python_test_0.1.py` — A well-commented Tkinter app featuring:
-  - Interactive button that becomes increasingly difficult to click
-  - Local LLM integration for dynamic responses using Ollama
-  - Debug system for monitoring LLM interaction
-  - Secret admin menu with advanced controls
-  - Progressive difficulty system with visual effects
+Files
+- `python_test_0.1.py` — A short, well-commented Tkinter app: a label and a
+- `python_test_0.1.py` — A short, well-commented Tkinter app: a label and a
+  button. Clicking the button updates the label and shows an info dialog.
+  The project has been extended into a joke app where the button becomes
+  increasingly evasive: it moves, changes size, jiggles, and can evade the
+  cursor after repeated clicks. A click counter tracks how many times the
+  user has clicked the button. The app can also generate context-aware
+  snarky replies using a local Ollama model.
 
-## Quick Start (Windows PowerShell)
+Quick start (Windows PowerShell)
 ```powershell
 python "...\VS Workspaces\Test Project\python_test_0.1.py"
 ```
 
-## What You'll Learn
+What you'll learn
 - How to import and use `tkinter` and `messagebox`.
 - Basic widget creation: `Label` and `Button`.
 - Wiring a callback (`command=`) to react to user input.
@@ -53,16 +56,13 @@ How the app uses Ollama
 - The prompt is context-aware: it includes the click count and difficulty to
   produce tailored responses.
 
-UI Features
-- LLM Status Indicator: Located in the top-right corner
-  - Green: LLM replies enabled
-  - Red: LLM replies disabled
-- Hidden Controls:
-  - Right-click main label for secret menu with LLM options
-  - Ctrl+L shortcut to toggle LLM on/off
-  - Option to show permanent LLM toggle button
-- Debug Window: Monitor LLM interactions and app state (via admin menu)
-- Visual Feedback: Dynamic button effects and animations
+UI notes
+- There's an LLM indicator in the top-right that shows whether LLM replies
+  are enabled (green = On, red = Off).
+- The LLM toggle is intentionally hidden: right-click the main label ("Don't
+  Click the Button!") to open a small secret menu with "Toggle LLM (secret)".
+  You can also press Ctrl+L to toggle LLM on/off. If you prefer a visible
+  control, right-click and choose "Show LLM Button" to reveal a toggle button.
 
 Security and privacy
 - All model generation happens locally via your Ollama installation. No
@@ -70,19 +70,12 @@ Security and privacy
   Ollama service intentionally.
 
 
-New Features
-- Click Counter: Tracks and displays button clicks in the main label
-- Progressive Difficulty System:
-  - Dynamic button movements with customizable patterns
-  - Visual effects including shrinking, growing, and jiggling
-  - Cursor evasion mechanics that increase with difficulty
-- Secret Admin Menu (click title 100 times):
-  - Button speed adjustment
-  - Debug window toggle
-  - Movement pattern selection
-  - Visual effect customization
-- The button remains intentionally catchable with persistence, though the 
-  challenge increases with each click
+New behaviours (joke app)
+- The app counts button clicks and displays the count in the main label.
+- Each click increases the "difficulty" and triggers an effect:
+  - small random moves, shrinking/growing, jiggle animation, and cursor-evade.
+- The button remains clickable by design; the effects are intentionally
+  mild so you can still catch it with persistence.
 
 If you want to explore further
 - Convert the module-level state into an Application class.
