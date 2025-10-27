@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 industrial3DP
+# 
+# This software is released under the MIT License.
+# https://opensource.org/licenses/MIT
+
 """Interactive Mouse Precision Game with Tkinter and Local AI
 
 This application demonstrates advanced GUI programming concepts using Python's

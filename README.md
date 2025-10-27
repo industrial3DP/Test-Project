@@ -94,4 +94,4 @@ Exercises (next steps for practice)
 - Refactor the app into a class and move the callbacks into instance methods.
 
 License
-- This small tutorial is MIT-style: use and adapt freely.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
