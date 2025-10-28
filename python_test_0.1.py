@@ -140,25 +140,25 @@ DIALOG_THEMES = [
     },
     {  # Level 1 - Mild Annoyance
         'bg': '#2d2d35',
-        'fg': "#55E0B7",  # Orange
+        'fg': '#ffa500',  # Orange
         'font': ('Segoe UI', 10, 'bold'),
         'title': 'Oh Really?'
     },
     {  # Level 2 - Clear Frustration
         'bg': '#2d2d3d',
-        'fg': "#00AAC09B",  # Coral
+        'fg': '#ff6b6b',  # Coral
         'font': ('Segoe UI', 11, 'bold'),
         'title': 'REALLY??'
     },
     {  # Level 3 - Heavy Sarcasm
         'bg': '#2d2d45',
-        'fg': "#6d49a7",  # Bright Red
+        'fg': '#ff4444',  # Bright Red
         'font': ('Segoe UI', 12, 'bold'),
         'title': 'SERIOUSLY?!'
     },
     {  # Level 4 - Maximum Frustration
         'bg': '#2d2d4d',
-        'fg': "#A1448A",  # Pure Red
+        'fg': '#ff0000',  # Pure Red
         'font': ('Segoe UI', 13, 'bold'),
         'title': 'OH COME ON!!'
     }
@@ -939,7 +939,7 @@ def _ollama_quick_check() -> None:
     """
     try:
         res = _ollama_heartbeat_once()
-        if not res['cli']:
+        if not res['service']:
             s = 'LLM: Off (no ollama)'
             color = 'red'
         else:
@@ -1068,19 +1068,7 @@ def build_ui(root: tk.Tk) -> None:
             llm_indicator.config(text=f"LLM: {'On' if llm_enabled else 'Off'}",
                                  fg=("green" if llm_enabled else "red"))
 
-    def _show_llm_button(r: tk.Tk):
-        """Reveal the hidden LLM toggle button (for debugging)."""
-        global llm_toggle_btn
-        if llm_toggle_btn is None:
-            llm_toggle_btn = tk.Button(r, text=f"LLM: {'On' if llm_enabled else 'Off'}",
-                                       command=_toggle_llm)
-            llm_toggle_btn.place(x=100, y=90)
-        else:
-            # bring to front
-            llm_toggle_btn.lift()
-
     menu.add_command(label="Toggle LLM (secret)", command=_toggle_llm)
-    menu.add_command(label="Show LLM Button", command=lambda: _show_llm_button(root))
     menu.add_separator()
     menu.add_command(label="Show Debug Window", command=_show_debug_window)
     menu.add_command(label="Clear Debug Log", command=lambda: _show_debug_window() or debug_text_widget.master.after(100, lambda: debug_text_widget and debug_text_widget.delete('1.0', 'end')))
